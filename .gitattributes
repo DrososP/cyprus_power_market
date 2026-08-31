@@ -1,0 +1,27 @@
+# Line-ending policy.
+#
+# Git normalises text to LF in the repository and checks it out as CRLF on
+# Windows, which is fine for almost everything here. The exceptions are the
+# files that get executed by Linux: a shell script or a Dockerfile carrying
+# CRLF fails inside a container with "bad interpreter: /usr/bin/env bash^M",
+# which is an unhelpful way to spend an evening. Those are pinned to LF
+# everywhere, including in the Windows working copy.
+
+* text=auto
+
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.dockerignore   text eol=lf
+
+# Binary — never line-ending-converted, never diffed as text. Parquet in
+# particular would be corrupted by any normalisation.
+*.parquet   binary
+*.duckdb    binary
+*.xlsx      binary
+*.xls       binary
+*.xlsm      binary
+*.zip       binary
+*.pdf       binary
+*.png       binary

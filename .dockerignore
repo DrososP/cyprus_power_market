@@ -1,0 +1,13 @@
+# The data volume is mounted at runtime — never bake the archive into the image.
+data/
+samples/
+
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.gitignore
+.streamlit/secrets.toml
+
+*.md
+!README.md

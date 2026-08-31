@@ -1,0 +1,46 @@
+# Two services, one image, one shared volume.
+#
+#   app        serves the dashboard, read-only as far as the data goes
+#   scheduler  runs the scrape/parse/build pipeline once a day
+#
+# The split matters: a refresh must never be driven by visitor traffic, and a
+# long-running build must never block the app from answering.
+#
+#   docker compose up -d --build
+#   docker compose logs -f scheduler
+#   docker compose exec scheduler ./refresh.sh     # force a refresh now
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - tsoc-data:/app/data
+    environment:
+      # Behind a reverse proxy or a Cloudflare Tunnel, so no need for
+      # Streamlit's own XSRF cookie handling to second-guess the origin.
+      STREAMLIT_SERVER_ENABLE_CORS: "false"
+      STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    ports:
+      # Bound to loopback: the tunnel or proxy is what faces the internet.
+      # Change to "8501:8501" only if you are deliberately exposing it.
+      - "127.0.0.1:8501:8501"
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - tsoc-data:/app/data
+    environment:
+      REFRESH_AT_UTC: "05:00"
+      # Refetch a trailing window each run — TSOC revises recent days, and the
+      # scraper's de-duplication makes the overlap nearly free.
+      LOOKBACK_DAYS: "10"
+      # Set RUN_ON_START=0 once the archive is populated, so a container
+      # restart doesn't kick off a scrape you didn't ask for.
+      RUN_ON_START: "1"
+    command: ["./scheduler.sh"]
+
+volumes:
+  tsoc-data:

@@ -1,0 +1,33 @@
+# Scraped data — regenerate with tsoc_scrape.py, don't commit.
+#
+# Note the pattern: git cannot re-include a file inside an excluded directory,
+# so this excludes the *contents* of data/ step by step rather than data/
+# itself. `data/` alone would silently defeat every negation below it.
+data/*
+!data/parquet/
+data/parquet/*
+
+# The Parquet build IS committed: the deployed app reads it, and Streamlit
+# Community Cloud has no persistent disk of its own. It is only a couple of MB.
+!data/parquet/*.parquet
+
+# ...except panel_30min, the largest file and the one that changes wholesale
+# every day. Nothing in the dashboard reads it — it exists for ad-hoc SQL
+# against the local DuckDB catalog — so keeping it out of git history saves the
+# most bloat for the least loss. tsoc_build.py regenerates it in seconds.
+data/parquet/panel_30min.parquet
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# secrets — never commit real credentials
+.streamlit/secrets.toml
+
+# os / editor
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
