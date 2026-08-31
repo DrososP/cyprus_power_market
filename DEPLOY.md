@@ -156,7 +156,7 @@ re-downloading hundreds of them is slow and discourteous to a rate-limited
 server.
 
 ```bash
-scp -r "C:/Users/44772/Repos/Cyprus power market/data" root@YOUR_HOST:/tmp/seed
+scp -r "path/to/Cyprus power market/data" root@YOUR_HOST:/tmp/seed
 ssh root@YOUR_HOST '
   cd /opt/tsoc &&
   docker compose cp /tmp/seed/. scheduler:/app/data/ &&
