@@ -1,0 +1,86 @@
+# Daily data refresh.
+#
+# Scrapes TSOC, parses the balancing reports, rebuilds the Parquet layer, and
+# commits it. Streamlit Community Cloud watches the repo and redeploys on the
+# push, so the site stays current without anyone touching it.
+name: refresh data
+
+on:
+  schedule:
+    # 05:00 UTC. TSOC generates the previous day's REP_TSO-001 at about 06:00
+    # Cyprus local — 03:00 UTC in summer, 04:00 in winter — so this clears it
+    # in both halves of the year.
+    - cron: "0 5 * * *"
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+concurrency:
+  # Never let two refreshes race for the cache or the branch.
+  group: refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write           # needed to push the rebuilt Parquet
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45     # a cold cache must not run for hours
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # data/raw is gitignored and far too big to commit, so it lives in the
+      # Actions cache instead. Without this the scraper would start from an
+      # empty archive every run and re-download hundreds of files — slow, and
+      # discourteous to a server that rate-limits.
+      - name: Restore the raw archive
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: tsoc-raw-${{ github.run_id }}
+          restore-keys: tsoc-raw-
+
+      # Scrapes are allowed to fail without failing the job. TSOC may throttle
+      # GitHub's IP ranges, and a bad afternoon upstream should not take the
+      # published site down — the build below still runs on whatever is held.
+      - name: Scrape series pages
+        continue-on-error: true
+        run: |
+          START=$(date -u -d '10 days ago' '+%Y-%m-%d')
+          python tsoc_scrape.py series --start "$START"
+
+      - name: Scrape report files
+        continue-on-error: true
+        run: |
+          python tsoc_scrape.py files --only \
+            bm_daily_activity_en isp_balancing_bdl dam_forecast isp_forecast
+
+      - name: Parse balancing market
+        continue-on-error: true
+        run: python tsoc_bm.py parse
+
+      # The build is NOT continue-on-error: if it cannot produce a valid
+      # Parquet layer there is nothing worth publishing. Its data-quality
+      # checks print pass/fail per dataset; --strict is deliberately omitted so
+      # a known DST anomaly does not block an otherwise good refresh.
+      - name: Build parquet + catalog
+        run: python tsoc_build.py
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/parquet
+          if git diff --cached --quiet; then
+            echo "no data change — nothing to publish"
+          else
+            git commit -m "data refresh $(date -u '+%Y-%m-%d')"
+            git push
+          fi
